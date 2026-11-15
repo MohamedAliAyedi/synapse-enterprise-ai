@@ -1,31 +1,23 @@
 package com.example.aiorchestrator.config;
 
-import org.springframework.boot.actuate.health.Health;
-import org.springframework.boot.actuate.health.HealthIndicator;
-import org.springframework.context.annotation.Bean;
+import org.springframework.boot.actuate.endpoint.web.EndpointRequest;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * Configuration for Spring Actuator health indicators.
- *
- * <p>This class registers a custom {@link HealthIndicator} that contributes
- * additional details to the standard {@code /actuator/health} endpoint.
- * In a real‑world scenario you would enrich the indicator with checks such as
- * database connectivity, external API reachability, or cache health.
+ * Configures Spring Boot Actuator endpoints for the AI Orchestrator service.
+ * Exposes JVM, HTTP, and health endpoints to support observability and e2e UI health checks.
  */
 @Configuration
-public class ActuatorConfig {
+public class ActuatorConfig implements WebMvcConfigurer {
 
-    /**
-     * Custom health indicator that reports the status of the AI Orchestrator service.
-     *
-     * @return a {@link HealthIndicator} bean exposing service name and version.
-     */
-    @Bean
-    public HealthIndicator aiOrchestratorHealthIndicator() {
-        return () -> Health.up()
-                .withDetail("service", "ai-orchestrator")
-                .withDetail("version", "1.0.0")
-                .build();
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/actuator/**")
+                .allowedOriginPatterns("*")
+                .allowedMethods("GET", "OPTIONS")
+                .allowedHeaders("*")
+                .maxAge(3600);
     }
 }
