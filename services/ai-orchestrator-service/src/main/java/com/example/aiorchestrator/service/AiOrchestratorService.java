@@ -1,78 +1,50 @@
 package com.example.aiorchestrator.service;
 
-import org.springframework.ai.model.Model;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.ChatResponse;
+import org.springframework.ai.chat.client.DefaultChatClient;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.stereotype.Service;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-
-import java.io.IOException;
-import java.util.concurrent.CompletableFuture;
+import org.springframework.util.StringUtils;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Sinks;
 
 /**
- * Service responsible for orchestrating AI calls and streaming the results back to the client via SSE.
+ * Service that orchestrates AI chat interactions using Spring AI and the Groq provider.
  * <p>
- * This class fixes two issues observed in the previous implementation:
- * <ul>
- *   <li>When the {@link Model} bean was not available (e.g., mis‑configuration), a {@code NullPointerException}
- *       was thrown, breaking the request.</li>
- *   <li>The {@link SseEmitter} was not always completed, causing client‑side time‑outs and resource leaks.</li>
- * </ul>
- * The new implementation performs a null‑check on the model, sends a clear error event, and guarantees that the
- * emitter is completed (or completed with error) in every execution path.
+ * The {@code streamChat} method now validates the incoming {@code prompt} and returns a
+ * {@link Flux} that either emits the streamed AI response or terminates with an
+ * {@link IllegalArgumentException} when the prompt is {@code null} or blank. This guard
+ * prevents downstream NPEs and ensures the SSE emitter in the controller always completes
+ * with a deterministic error signal.
  */
 @Service
 public class AiOrchestratorService {
 
-    private final Model model;
+    private final ChatClient chatClient;
 
-    @Autowired
-    public AiOrchestratorService(Model model) {
-        this.model = model;
+    public AiOrchestratorService(ChatClient chatClient) {
+        this.chatClient = chatClient;
     }
 
     /**
-     * Streams the AI response for the given {@code prompt} to the supplied {@link SseEmitter}.
+     * Streams the AI response for the given {@code prompt}.
      *
-     * @param prompt  the user prompt to send to the AI model
-     * @param emitter the SSE emitter used to push events to the client
+     * @param prompt the user prompt; must be non‑null and contain at least one non‑whitespace character
+     * @return a {@link Flux} emitting chunks of the AI response
      */
-    public void streamChat(String prompt, SseEmitter emitter) {
-        // Defensive check: ensure the model bean is present before proceeding.
-        if (this.model == null) {
-            try {
-                emitter.send(SseEmitter.event()
-                        .name("error")
-                        .data("AI model is not configured. Please contact the administrator."));
-            } catch (IOException ignored) {
-                // If we cannot send the error, just complete the emitter.
-            } finally {
-                emitter.complete();
-            }
-            return;
+    public Flux<String> streamChat(String prompt) {
+        // ---- FIX: validate prompt to avoid NPEs and undefined behaviour ----
+        if (!StringUtils.hasText(prompt)) {
+            return Flux.error(new IllegalArgumentException("Prompt must not be null or empty"));
         }
+        // -------------------------------------------------------------------
 
-        // Run the potentially blocking AI call in a separate thread to avoid blocking the servlet container.
-        CompletableFuture.runAsync(() -> {
-            try {
-                // NOTE: The actual Model API may differ (e.g., chat completion, streaming). Here we use a simple
-                // generate(...) method for illustration. Replace with the real streaming call when available.
-                String response = this.model.generate(prompt);
-
-                // Send the response as a single SSE event. In a real streaming scenario, you would split the
-                // response into chunks and emit multiple events.
-                emitter.send(SseEmitter.event()
-                        .name("message")
-                        .data(response));
-
-                // Signal successful completion.
-                emitter.complete();
-            } catch (IOException ioEx) {
-                // IO problems while writing to the emitter – propagate as an error.
-                emitter.completeWithError(ioEx);
-            } catch (Exception ex) {
-                // Any other unexpected exception should also close the emitter with an error.
-                emitter.completeWithError(ex);
-            }
-        });
+        // Build a reactive chat request that streams the response.
+        return chatClient.prompt(new UserMessage(prompt))
+                .stream()
+                .map(ChatResponse::getResult)
+                .flatMapIterable(result -> result.getOutput().split("\n"))
+                .filter(chunk -> !chunk.isBlank());
     }
 }
