@@ -1,0 +1,11 @@
+<div *ngIf="health$ | async as health; else loading">
+  <h2 class="text-xl font-bold mb-4">System Health: {{ health.status }}</h2>
+  <ul class="list-disc pl-5">
+    <li *ngFor="let entry of health.components | keyvalue">
+      <strong>{{ entry.key }}:</strong> {{ entry.value.status }}
+    </li>
+  </ul>
+</div>
+<ng-template #loading>
+  <p class="text-gray-600">Loading health status...</p>
+</ng-template>
