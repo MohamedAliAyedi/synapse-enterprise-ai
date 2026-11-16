@@ -1,0 +1,19 @@
+<div class="stream-viewer">
+  <!-- Loading state -->
+  <div *ngIf="loading()" class="loading">
+    <span class="spinner"></span> Connecting to stream…
+  </div>
+
+  <!-- Error state -->
+  <div *ngIf="error()" class="error">
+    <p>{{ error() }}</p>
+    <button (click)="retry()" class="retry-btn">Retry</button>
+  </div>
+
+  <!-- Streamed messages -->
+  <ul *ngIf="!loading() && !error()" class="messages-list">
+    <li *ngFor="let msg of messages()" class="message-item">
+      {{ msg }}
+    </li>
+  </ul>
+</div>
