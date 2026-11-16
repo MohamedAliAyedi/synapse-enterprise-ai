@@ -1,0 +1,16 @@
+import { defineConfig } from 'cypress';
+
+export default defineConfig({
+  e2e: {
+    baseUrl: 'http://localhost:4200',
+    specPattern: 'cypress/e2e/**/*.cy.{js,ts}',
+    supportFile: false,
+    video: false,
+    screenshotsFolder: 'cypress/screenshots',
+    videosFolder: 'cypress/videos',
+    setupNodeEvents(on, config) {
+      // place to register plugins or custom tasks if needed
+      return config;
+    }
+  }
+});
