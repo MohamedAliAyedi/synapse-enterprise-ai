@@ -1,1 +1,41 @@
-package com.example.aiorchestrator.controller;\n\nimport org.springframework.http.MediaType;\nimport org.springframework.http.ResponseEntity;\nimport org.springframework.web.bind.annotation.GetMapping;\nimport org.springframework.web.bind.annotation.RequestMapping;\nimport org.springframework.web.bind.annotation.RestController;\nimport org.springframework.web.servlet.mvc.method.annotation.SseEmitter;\n\nimport com.example.aiorchestrator.service.AiOrchestratorService;\n\nimport lombok.RequiredArgsConstructor;\nimport lombok.extern.slf4j.Slf4j;\n\n/**\n * Controller exposing streaming AI responses via Server-Sent Events (SSE).\n */\n@RestController\n@RequestMapping("/api/stream")\n@RequiredArgsConstructor\n@Slf4j\npublic class StreamController {\n\n    private final AiOrchestratorService orchestratorService;\n\n    /**\n     * Starts a streaming response for the given user query.\n     *\n     * @param query the user prompt\n     * @return an {@link SseEmitter} emitting incremental AI tokens\n     */\n    @GetMapping(value = "/completion", produces = MediaType.TEXT_EVENT_STREAM_VALUE)\n    public SseEmitter streamCompletion(String query) {\n        log.debug("Received streaming request for query: {}", query);\n        SseEmitter emitter = new SseEmitter();\n        orchestratorService.streamResponse(query, emitter);\n        return emitter;\n    }\n\n    /**\n     * Health check endpoint for the streaming controller.\n     *\n     * @return simple OK response\n     */\n    @GetMapping("/health")\n    public ResponseEntity<String> health() {\n        return ResponseEntity.ok("StreamController is healthy");\n    }\n}\n
+package com.example.aiorchestrator.controller;
+
+import com.example.aiorchestrator.service.AiOrchestratorService;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
+
+/**
+ * REST controller that streams AI responses using Server-Sent Events (SSE).
+ * <p>
+ * The endpoint produces a continuous stream of {@link String} payloads.
+ * Errors occurring during streaming are handled by {@link com.example.aiorchestrator.exception.StreamingExceptionHandler}
+ * and emitted as SSE error events.
+ * </p>
+ */
+@RestController
+@RequestMapping("/api/stream")
+public class StreamController {
+
+    private final AiOrchestratorService orchestratorService;
+
+    public StreamController(final AiOrchestratorService orchestratorService) {
+        this.orchestratorService = orchestratorService;
+    }
+
+    /**
+     * Starts a streaming response.
+     *
+     * @return a {@link Flux} emitting streamed data as {@code text/event-stream}
+     */
+    @GetMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<String> stream() {
+        return orchestratorService.streamResponses()
+                .map(response -> "data: " + response + "\n\n")
+                .doOnError(throwable -> {
+                    // Error handling is delegated to the global exception handler.
+                });
+    }
+}
