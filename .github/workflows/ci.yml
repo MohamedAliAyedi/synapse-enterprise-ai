@@ -7,33 +7,54 @@ on:
     branches: [ develop, main ]
 
 jobs:
-  e2e:
+  build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: synapse
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Set up JDK 21
+        uses: actions/setup-java@v3
         with:
-          node-version: '20'
+          distribution: temurin
+          java-version: '21'
 
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-
 
-      - name: Start Docker Compose services
+      - name: Build backend services
+        run: mvn -B verify
+
+      - name: Start dependent services
         run: .github/scripts/start-services.sh
 
-      - name: Verify microservices health
+      - name: Wait for services health
         run: .github/scripts/check-services-health.sh
 
-      - name: Run Cypress E2E tests
+      - name: Run Angular unit tests
+        run: .github/scripts/run-angular-tests.sh
+
+      - name: Run Cypress end-to-end tests
         uses: cypress-io/github-action@v5
         with:
-          start: npm run start --prefix frontend
+          start: npm run start:ci
           wait-on: http://localhost:4200
           wait-on-timeout: 120
-          browser: chrome
-        env:
-          CYPRESS_baseUrl: http://localhost:4200
+          command: npm run e2e:ci
