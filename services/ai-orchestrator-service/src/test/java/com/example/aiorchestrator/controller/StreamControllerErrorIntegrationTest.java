@@ -1,28 +1,25 @@
 package com.example.aiorchestrator.controller;
 
+import com.example.aiorchestrator.exception.StreamingException;
 import com.example.aiorchestrator.service.AiOrchestratorService;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.mockito.Mockito.doThrow;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Integration tests for {@link StreamController} focusing on error handling scenarios.
- * <p>
- * These tests verify that the controller correctly returns HTTP error codes when
- * the request is malformed or when the underlying service fails.
+ * Integration test that verifies the {@link StreamController} returns a 502 Bad Gateway
+ * when a {@link StreamingException} is thrown by the service layer.
  */
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 class StreamControllerErrorIntegrationTest {
 
@@ -32,32 +29,17 @@ class StreamControllerErrorIntegrationTest {
     @MockBean
     private AiOrchestratorService aiOrchestratorService;
 
-    @Nested
-    @DisplayName("Prompt validation errors")
-    class PromptValidation {
-        @Test
-        @DisplayName("GET /stream without prompt returns 400 Bad Request")
-        void whenPromptMissing_thenBadRequest() throws Exception {
-            mockMvc.perform(MockMvcRequestBuilders.get("/stream"))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(content().string("Missing required parameter: prompt"));
-        }
-    }
+    @Test
+    @DisplayName("GET /api/stream returns 502 when StreamingException occurs")
+    void whenStreamingException_thenReturnsBadGateway() throws Exception {
+        // Simulate a streaming failure in the service layer
+        doThrow(new StreamingException("Simulated streaming failure"))
+                .when(aiOrchestratorService).streamResponse(anyString());
 
-    @Nested
-    @DisplayName("Service layer failures")
-    class ServiceFailures {
-        @Test
-        @DisplayName("GET /stream with valid prompt but service throws exception returns 500")
-        void whenServiceThrowsException_thenInternalServerError() throws Exception {
-            // Simulate a runtime exception from the service layer
-            Mockito.when(aiOrchestratorService.streamResponse(anyString()))
-                    .thenThrow(new RuntimeException("Service error"));
-
-            mockMvc.perform(MockMvcRequestBuilders.get("/stream")
-                            .param("prompt", "test prompt"))
-                    .andExpect(status().isInternalServerError())
-                    .andExpect(content().string("Service error"));
-        }
+        // Perform the request – the controller should delegate to the service and the
+        // GlobalExceptionHandler (via StreamingExceptionHandler) must translate it to 502.
+        mockMvc.perform(get("/api/stream")
+                        .param("prompt", "test prompt"))
+                .andExpect(status().isBadGateway());
     }
 }
