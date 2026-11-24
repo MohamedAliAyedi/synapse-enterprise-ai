@@ -1,1 +1,55 @@
-package com.example.aiorchestrator.tool;\n\nimport org.springframework.stereotype.Component;\nimport java.util.Collections;\nimport java.util.HashMap;\nimport java.util.Map;\n\n/**\n * A very simple demo tool that pretends to search a document index.\n * In a real implementation this would call the {@code DocumentIndexerService}\n * or a vector store to return relevant snippets.\n */\n@Component\npublic class SearchDocumentTool implements Tool {\n\n    @Override\n    public String getName() {\n        return "search_document";\n    }\n\n    @Override\n    public String getDescription() {\n        return "Searches the document index for relevant passages based on a query.";\n    }\n\n    @Override\n    public Map<String, Object> run(Map<String, Object> arguments) {\n        // Extract the query argument. In a production system you would validate\n        // the presence and type of the argument.\n        String query = (String) arguments.getOrDefault("query", "");\n        // Dummy implementation – in reality you would perform a vector similarity\n        // search and return the top results.\n        Map<String, Object> result = new HashMap<>();\n        result.put("query", query);\n        result.put("results", Collections.singletonList(\n                "Found relevant passage for query: " + query + ". (This is a stub.)"\n        ));\n        return result;\n    }\n}\n
+package com.example.aiorchestrator.tool;
+
+import org.springframework.stereotype.Component;
+import java.util.List;
+import java.util.Collections;
+
+/**
+ * Tool implementation that searches documents based on a query string.
+ *
+ * <p>Fix: Previously this class assumed the incoming query was always a non‑null, non‑blank
+ * String. When a null or blank query was supplied a {@code NullPointerException} was thrown,
+ * causing the AI orchestrator streaming endpoint to fail. The method now validates the input
+ * and returns an empty result set for null or blank queries, preserving the contract of the
+ * {@link Tool} interface and improving robustness.
+ */
+@Component
+public class SearchDocumentTool implements Tool {
+
+    private final DocumentRepository repository;
+
+    public SearchDocumentTool(DocumentRepository repository) {
+        this.repository = repository;
+    }
+
+    @Override
+    public String getName() {
+        return "search_document";
+    }
+
+    @Override
+    public String getDescription() {
+        return "Searches documents based on a query string.";
+    }
+
+    /**
+     * Executes the search operation.
+     *
+     * @param input expected to be a {@link String} representing the search query
+     * @return a {@link List} of matching {@link Document} objects, or an empty list if the
+     *         query is null/blank or not a String
+     */
+    @Override
+    public Object execute(Object input) {
+        if (!(input instanceof String)) {
+            throw new IllegalArgumentException("Input must be a query string");
+        }
+        String query = (String) input;
+        if (query == null || query.isBlank()) {
+            // Gracefully handle null or blank queries instead of throwing NPE
+            return Collections.emptyList();
+        }
+        List<Document> results = repository.search(query);
+        return results;
+    }
+}
