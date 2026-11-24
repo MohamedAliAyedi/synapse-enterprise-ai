@@ -1,0 +1,1 @@
+package com.example.documentindexer.service;\n\nimport com.example.documentindexer.port.EmbeddingClient;\nimport com.example.documentindexer.port.DocumentChunkRepository;\nimport com.example.documentindexer.domain.DocumentChunk;\nimport org.springframework.stereotype.Service;\nimport org.springframework.transaction.annotation.Transactional;\nimport java.util.List;\n\n
